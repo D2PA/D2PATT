@@ -1,0 +1,182 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "analysis-brief",
+  "title": "AnalysisBrief",
+  "description": "Gate2承認後にオーケストレーター（main）がdata-analystへ渡す分析指示書。",
+  "type": "object",
+  "required": [
+    "policy_question",
+    "tasks",
+    "variables_of_interest",
+    "csv_path",
+    "output_dir"
+  ],
+  "properties": {
+    "policy_question": {
+      "type": "string"
+    },
+    "tasks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/AnalysisTask" },
+      "minItems": 1,
+      "maxItems": 5
+    },
+    "variables_of_interest": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "全タスクで使用する列名の和集合"
+    },
+    "pii_columns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "全出力・集計から除外する列名"
+    },
+    "csv_path": {
+      "type": "string",
+      "description": "元（生）CSVの絶対パス。前処理（派生＋懸念ありならマスク）は設計承認（Gate2）の前にdata-analystが実施し、共有前処理済みCSV（preprocessed_input.csv）を生成する。"
+    },
+    "output_dir": {
+      "type": "string",
+      "description": "出力先ディレクトリの絶対パス（例: <分析層の根>/projects/<案件名>/output）"
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "オペレーターからの追加指示"
+    },
+    "external_data": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ExternalDataUse" },
+      "default": [],
+      "description": "選定した外部データの構造化記録（design.md スコープB）。空配列＝外部データ不使用。各エントリはuse_modeで使い方を明示する：merge＝行結合（joinが必須。結合後の外部列は前処理済みCSVに載る）／reference＝結合せず基準値として参照（joinは書かない。参照値はフェーズ3.5で抽出され、tasksのexternal_refsから参照する）"
+    }
+  },
+  "$defs": {
+    "AnalysisTask": {
+      "type": "object",
+      "required": ["name", "method", "rationale", "target_variables", "expected_output"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "タスクの一意な短い名前（例: cross_tab_age_settlement）"
+        },
+        "method": {
+          "type": "string",
+          "description": "使用する統計手法（例: chi-square cross-tabulation）"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "この手法を選んだ理由"
+        },
+        "target_variables": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "このタスクで使用する列名"
+        },
+        "expected_output": {
+          "type": "string",
+          "description": "期待される出力の説明（例: 度数分布表 + ヒートマップ）"
+        },
+        "external_refs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "このタスクが参照する外部ソースのsource_name（reference用途）。空＝参照なし"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExternalDataUse": {
+      "type": "object",
+      "required": ["source_name", "provider", "usage_terms", "access", "use_mode", "variables_to_use", "role"],
+      "allOf": [
+        {
+          "if": { "required": ["use_mode"], "properties": { "use_mode": { "const": "merge" } } },
+          "then": { "required": ["join"] }
+        },
+        {
+          "if": { "required": ["use_mode"], "properties": { "use_mode": { "const": "reference" } } },
+          "then": {
+            "not": { "required": ["join"] },
+            "properties": { "role": { "const": "benchmark" } }
+          }
+        }
+      ],
+      "properties": {
+        "use_mode": {
+          "type": "string",
+          "enum": ["merge", "reference"],
+          "description": "外部データの使い方：merge=行結合（joinが必須）／reference=結合せず基準値として参照（joinは書かない・roleはbenchmark固定）。省略不可"
+        },
+        "granularity_and_period": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "候補（ResearchOutput）のgranularity_and_periodを転記。reference用途では整合検査（econometrician）の材料になるため記入する"
+        },
+        "source_name": {
+          "type": "string",
+          "description": "候補（ResearchOutput）のsource_nameをそのまま転記（fetch計画・manifestとの突合キー）"
+        },
+        "provider": {
+          "type": "string",
+          "description": "候補から転記。レポートの出典表記に使用"
+        },
+        "usage_terms": {
+          "type": "string",
+          "description": "候補から転記。ライセンス・出典要件（レポート出典節の供給源）"
+        },
+        "access": {
+          "description": "候補のaccess_methodをそのまま転記した構造化アクセス仕様。fetch計画の入力になる。URLの創作・編集は禁止",
+          "$ref": "research-output.json#/$defs/AccessSpec"
+        },
+        "join": {
+          "description": "結合仕様。use_mode=merge のとき必須、use_mode=reference のとき記述禁止（allOfで機械的に強制）",
+          "$ref": "#/$defs/JoinSpec"
+        },
+        "variables_to_use": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "取り込む外部列名（デザイナーの意図名。実列名との突合はフェーズ3.5の列名解決で行う）"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["confounder_control", "benchmark", "gap_fill"],
+          "description": "分析上の役割：交絡統制／ベンチマーク／欠落補完"
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "結合の限界・注意（例：文脈変数の実効N、被覆の偏りの懸念）"
+        }
+      },
+      "additionalProperties": false
+    },
+    "JoinSpec": {
+      "type": "object",
+      "required": ["local_keys", "external_keys", "external_granularity"],
+      "properties": {
+        "local_keys": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "手元データ側の結合キー列（本briefで定義する派生列も可）。external_keysと位置対応・同数（同数性の機械検証はスキーマ外）"
+        },
+        "external_keys": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "外部データ側の結合キー列。local_keysと位置対応・同数"
+        },
+        "external_granularity": {
+          "type": "string",
+          "enum": ["individual", "municipality", "prefecture", "national", "other"],
+          "description": "外部データの空間粒度。individualより粗い場合は文脈変数の付与となり、実効サンプルサイズと生態学的誤謬の注意が適用される"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

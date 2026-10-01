@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "verification-response",
+  "title": "VerificationResponse",
+  "description": "analysis-designer が結果検証の respond_to_results_review ステップで PM へ返す対応判断。各指摘への対応方針と、探索的追加タスクの仕様を含む。承認済みブリーフは事前登録の記録であり書き換えない——追加タスクの仕様はここに載り、結果は AnalysisOutput に origin=verification_exploratory の札つきで載る。収束の主導権は designer にある。",
+  "type": "object",
+  "required": ["responses", "verdict"],
+  "properties": {
+    "responses": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ReviewResponse" },
+      "default": [],
+      "description": "ReviewResultの各コメントへの対応。must_fixコメントには必ず1件対応させる（acceptまたはpush_back）"
+    },
+    "added_tasks": {
+      "type": "array",
+      "items": { "$ref": "analysis-brief.json#/$defs/AnalysisTask" },
+      "default": [],
+      "description": "探索的に追加するタスクの仕様（結果を見た後に生まれた工夫）。既存のpreprocessed_input.csvに既にある列のみを使う（新しい派生列は作らない——前処理への再突入はスコープ外）。追加数の上限はここでは検査しない：上限の単一情報源はcheck_result_lock.py（--max-additions。既定値はconfig.jsonのmax_result_additionsで定める）であり、ラウンドをまたぐ合算はスキーマでは検査できない。必ず結果にorigin=verification_exploratoryが付き、causation_claimはcorrelation_onlyが上限"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["done", "continue"],
+      "description": "done=対応は十分・収束（ループ終了） / continue=さらに対応の余地あり"
+    },
+    "revision_notes": {
+      "type": "string",
+      "description": "今ラウンドで何に対応した／しなかったか、およびその理由"
+    }
+  },
+  "$defs": {
+    "ReviewResponse": {
+      "type": "object",
+      "required": ["target", "action", "reason"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "対応するReviewCommentの参照（当該コメントのtask名、または計画全体への指摘は \"overall\"）。同一targetに複数コメントがある場合はconcernの要点を併記して特定する"
+        },
+        "fix_type": {
+          "type": "string",
+          "enum": ["claim_downgrade", "annotation", "error_refix", "robustness_run", "upgrade_path"],
+          "description": "対応するmust_fixコメントのfix_typeを転記（review-result.jsonのReviewComment.fix_typeと同じenum）。suggestion（severity=consider/minor）への対応では不要"
+        },
+        "action": {
+          "type": "string",
+          "enum": ["accept", "push_back", "decline"],
+          "description": "accept=受け入れて適用する（適用方法をreasonに具体化） / push_back=must_fixへの根拠つき拒否（データに根差した理由が書ける場合のみ。未解決must_fixとしてGate3に両論併記される） / decline=suggestionの不採用（最少の分析・過剰分析の回避がそのまま採否基準）"
+        },
+        "reason": {
+          "type": "string",
+          "description": "その対応を選んだ理由。acceptなら適用方法の具体化、push_backならデータに根差した拒否理由（推測ではなく実データの読み）、declineなら不採用の理由"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

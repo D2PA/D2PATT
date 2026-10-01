@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "mayor-feasibility-check",
+  "title": "MayorFeasibilityCheck",
+  "description": "首長がフェーズ3（設計収束後）に分析計画（AnalysisBrief）の行動可能性をチェックし、PM（main）へ返す結果。政策・市民・議会の目線で「この分析結果が出たとして行政は具体的に何ができるか」を問う。分析の正確性・統計的妥当性は判断しない（それはeconometricianの役割）。ループ機構はなく、PMはaction_requiredで分岐する。",
+  "type": "object",
+  "required": ["action_required", "feasibility_assessment", "comments", "overall_note"],
+  "properties": {
+    "action_required": {
+      "type": "boolean",
+      "description": "対応要否フラグ（PMの分岐用の機械的シグナル）。false=行動可能性に問題なくそのまま前処理（フェーズ3.5）へ進める / true=デザイナーが対応すべき指摘がある。論理的には feasibility_assessment=actionable→false、weak/not_actionable→true が自然だが、両方を明示する"
+    },
+    "feasibility_assessment": {
+      "type": "string",
+      "enum": ["actionable", "weak", "not_actionable"],
+      "description": "actionable=政策判断に十分使える / weak=使えるが行動可能性が弱い・微修正で改善余地 / not_actionable=このままでは行政が動けない・再設計が必要"
+    },
+    "comments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/FeasibilityComment" },
+      "default": [],
+      "description": "行動可能性に関する具体的な指摘の一覧。問題なければ空配列（網羅のための水増し禁止）"
+    },
+    "overall_note": {
+      "type": "string",
+      "description": "首長としての総括コメント。平易な日本語（人間にも伝わる表現）で、計画全体が行政の行動に繋がるかを述べる"
+    }
+  },
+  "$defs": {
+    "FeasibilityComment": {
+      "type": "object",
+      "required": ["target", "concern", "suggestion"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "対象のtask名、または計画全体への指摘は \"overall\""
+        },
+        "concern": {
+          "type": "string",
+          "description": "なぜこの分析が行政の具体的な行動に繋がりにくいか（「分析のための分析」になっていないか）"
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "行動可能にするには何が要るか（どの観点・どの比較軸・どの問いを加えれば政策判断に使えるか）"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

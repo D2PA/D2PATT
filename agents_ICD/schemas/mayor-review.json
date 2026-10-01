@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "mayor-review",
+  "title": "MayorReview",
+  "description": "首長がフェーズ6（report-writerの執筆＋mainの書き込み検証の後、FINAL REVIEWの前）にレポートを非専門家目線でレビューし、PM（main）へ返す結果。「伝わるか」「行動に繋がるか」の観点でコメントし承認/差し戻しを判断する。分析の正確性は判断しない。ループ機構はなく、mainがコメントの採否を判断して採用時のみreport-writerに1回修正委譲する。",
+  "type": "object",
+  "required": ["action_required", "verdict", "comments", "overall_note"],
+  "properties": {
+    "action_required": {
+      "type": "boolean",
+      "description": "対応要否フラグ（mainの分岐用の機械的シグナル）。false=そのまま FINAL REVIEW へ / true=main が採否を判断し、採用ならreport-writerに修正委譲する。論理的には verdict=approve→false、revise→true が自然だが、両方を明示する"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["approve", "revise"],
+      "description": "approve=承認 / revise=差し戻し（設計図のOK/NGに対応）。ループがないので revise でも自動往復はせず、mainの採否判断の材料になる"
+    },
+    "comments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ReviewComment" },
+      "default": [],
+      "description": "レポートへの具体的な指摘の一覧。承認で指摘なしなら空配列（網羅のための水増し禁止）"
+    },
+    "overall_note": {
+      "type": "string",
+      "description": "首長としての総括コメント。平易な日本語で、レポートが住民・議会に伝わり行政の行動に繋がるかを述べる"
+    }
+  },
+  "$defs": {
+    "ReviewComment": {
+      "type": "object",
+      "required": ["target", "concern", "suggestion"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "レポートのどこへの指摘か（節見出し・図表名など）、または全体への指摘は \"overall\""
+        },
+        "concern": {
+          "type": "string",
+          "description": "非専門家として何が分かりにくいか／行動に繋がらないか（「この図は分からない」「結論が先に来ていない」「で、何をすればいいのかが見えない」等）"
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "どう直すべきか（具体的に）"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

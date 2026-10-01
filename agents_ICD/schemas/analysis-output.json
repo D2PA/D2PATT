@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "analysis-output",
+  "title": "AnalysisOutput",
+  "description": "data-analystがオーケストレーター（main）へ返す分析結果全体。Gate3で人間に提示される。",
+  "type": "object",
+  "required": ["data_audit", "results", "skipped_tasks", "validity_notes", "has_critical_issues", "analysis_log_path"],
+  "properties": {
+    "data_audit": { "$ref": "#/$defs/DataAuditResult" },
+    "results": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/SingleAnalysisResult" },
+      "description": "完了した各AnalysisTaskの結果（1件1エントリ）"
+    },
+    "skipped_tasks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "完了できなかったtask_nameと理由（例: 'basic_stats: N<5のセルが全体の30%超'）"
+    },
+    "validity_notes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/StatisticalValidityNote" },
+      "default": [],
+      "description": "分析全体に関わる統計的懸念事項"
+    },
+    "has_critical_issues": {
+      "type": "boolean",
+      "description": "validity_notesにseverity='critical'が1件でもあればtrue"
+    },
+    "analysis_log_path": {
+      "type": "string",
+      "default": "<OUTPUT_DIR>/analysis_log.md",
+      "description": "実行ログのパス"
+    }
+  },
+  "$defs": {
+    "DataAuditResult": {
+      "type": "object",
+      "required": ["n_rows", "n_cols", "columns", "missing_counts", "duplicate_rows", "quality_issues"],
+      "properties": {
+        "n_rows": { "type": "integer" },
+        "n_cols": { "type": "integer" },
+        "columns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "全列名（PII列も名前のみ含む）"
+        },
+        "missing_counts": {
+          "type": "object",
+          "additionalProperties": { "type": "integer" },
+          "description": "列名 → 欠損数"
+        },
+        "duplicate_rows": { "type": "integer", "default": 0 },
+        "quality_issues": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "検出した問題の平文説明（PII候補の指摘を含む）"
+        },
+        "source_encoding": {
+          "type": "string",
+          "enum": ["utf-8-sig", "cp932"],
+          "description": "生入力CSVを実際に復号できた文字コード（任意・CSV入力時のみ）。前処理はこの値で生データを読み、出力は常にUTF-8で書く"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SingleAnalysisResult": {
+      "type": "object",
+      "required": [
+        "task_name", "method", "variables_used", "n_observations",
+        "key_finding", "statistics", "causation_claim",
+        "interpretation_note", "caution"
+      ],
+      "properties": {
+        "task_name": {
+          "type": "string",
+          "description": "AnalysisTask.nameと完全一致すること"
+        },
+        "method": { "type": "string", "description": "使用した手法とライブラリ" },
+        "variables_used": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "n_observations": { "type": "integer" },
+        "key_finding": {
+          "type": "string",
+          "description": "データが示すことを1文で（平易な日本語）"
+        },
+        "statistics": {
+          "type": "object",
+          "description": "計算した統計値のフラットdict。使用可能キー: n, mean, sd, median, p_value, confidence_interval, coefficient, r_squared, chi2, cramers_v, effect_size",
+          "additionalProperties": true
+        },
+        "causation_claim": {
+          "type": "string",
+          "enum": ["descriptive", "correlation_only", "causal_evidence"],
+          "description": "descriptive=記述統計のみ / correlation_only=相関・関連の記述 / causal_evidence=DID等の因果推論手法を適用した場合のみ"
+        },
+        "origin": {
+          "type": "string",
+          "enum": ["brief", "verification_exploratory"],
+          "description": "この結果の出自。不在はbriefと同義（承認済みブリーフのタスク）。フェーズ5の結果検証で追加された探索的タスクはverification_exploratoryを必須とする——check_result_lock.pyがfail-closedで検査し（マーカー不在の追加＝違反）、探索的タスクのcausation_claimはcorrelation_onlyが上限。仮説生成であって確証ではない"
+        },
+        "chart_path": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "保存したPNGのパス（例: <OUTPUT_DIR>/figures/task_name.png）"
+        },
+        "table_path": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "保存したCSVのパス"
+        },
+        "interpretation_note": {
+          "type": "string",
+          "description": "政策文脈でのこの結果の意味（1〜3文）"
+        },
+        "caution": {
+          "type": "string",
+          "description": "この分析の具体的な限界・言えないこと"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StatisticalValidityNote": {
+      "type": "object",
+      "required": ["concern", "severity"],
+      "properties": {
+        "concern": { "type": "string", "description": "懸念事項の平文説明" },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "critical"],
+          "description": "info=参考情報 / warning=解釈注意 / critical=結果が信頼できない可能性・必ずオペレーターに報告"
+        },
+        "affected_tasks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "この懸念が関係するtask_name"
+        },
+        "recommendation": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "推奨する対処法または代替手法"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

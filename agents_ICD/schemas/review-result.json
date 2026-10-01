@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "review-result",
+  "title": "ReviewResult",
+  "description": "econometricianがフェーズ3でAnalysisBriefを方法論レビューし、PMへ返す結果。助言と批評のみ（コードは書かない）。",
+  "type": "object",
+  "required": ["comments", "overall_assessment"],
+  "properties": {
+    "comments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ReviewComment" },
+      "default": [],
+      "description": "方法論的な指摘の一覧。計画が健全なら少数で良い（網羅のための水増し禁止）"
+    },
+    "overall_assessment": {
+      "type": "string",
+      "description": "計画が健全か、最重要の1〜2点を述べる1段落"
+    }
+  },
+  "$defs": {
+    "ReviewComment": {
+      "type": "object",
+      "required": ["target", "concern", "rationale", "suggestion", "severity"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "対象のtask名、または計画全体への指摘は \"overall\""
+        },
+        "concern": {
+          "type": "string",
+          "description": "何が問題か"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "このデータ・問いにとってなぜ問題なのか（必須。理由なき指摘は禁止）"
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "具体的な代替案または修正案"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["must_fix", "consider", "minor"],
+          "description": "must_fix=要修正（強制力あり） / consider=検討推奨 / minor=軽微。consider・minorは提案であり、採否はanalysis-designerが判断する"
+        },
+        "fix_type": {
+          "type": "string",
+          "enum": ["claim_downgrade", "annotation", "error_refix", "robustness_run", "upgrade_path"],
+          "description": "結果検証の severity=must_fix コメントでは必須（運用契約）。設計時のレビューでは使わない。claim_downgrade=主張を弱めよ / annotation=限界を書き添えよ（数字はそのまま） / error_refix=誤りを直して再実行せよ（誤りの修正で数値が強く出るのは正当——縛るのは主張の強さであって数値ではない） / robustness_run=頑健性を確かめよ（スキルの頑健性メニュー内のみ） / upgrade_path=次の一手を示せ（今回の結果は変えない）。主張を強める型は存在しない——結果を見た後に主張を盛る指示は、この5型に乗らないため機械検問を通過できない"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

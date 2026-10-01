@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "requirements-summary",
+  "title": "RequirementsSummary",
+  "description": "フェーズ1完了後にオーケストレーター（main）が生成し、Gate1で人間が承認する要件サマリー。",
+  "type": "object",
+  "required": [
+    "policy_question",
+    "target_audience",
+    "analysis_questions",
+    "data_description",
+    "municipality_name",
+    "actionability_definition",
+    "security_concern"
+  ],
+  "properties": {
+    "security_concern": {
+      "type": "boolean",
+      "description": "入口で人間が宣言。true=懸念あり（監査＋マスキング実施・生データはAPIに出さない）/ false=懸念なし（サブエージェント監査・マスキングはスキップ。構造プロファイルはprofile_data.pyが取得しmainは生CSVを直接読まない）。どちらでも生の行値はAPIに到達しない。明示的にfalseと宣言されない限りtrue扱い。"
+    },
+    "external_data_requested": {
+      "type": "boolean",
+      "default": false,
+      "description": "外部オープンデータ調査（Phase2）を行うか。false ならPhase2スキップ。"
+    },
+    "policy_question": {
+      "type": "string",
+      "description": "自治体が答えを求めている政策課題"
+    },
+    "target_audience": {
+      "type": "string",
+      "description": "レポートの読者（例: 担当課長・議会・D2PAメンバー）"
+    },
+    "analysis_questions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 2,
+      "maxItems": 5,
+      "description": "分析が答えるべき具体的な問い（2〜5件）"
+    },
+    "data_description": {
+      "type": "string",
+      "description": "利用可能なデータの概要（ソース・形式・期間・件数）"
+    },
+    "pii_columns": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "個人情報を含む列名（Gate1で人間が最終確定）"
+    },
+    "free_text_columns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["column", "use_in_analysis"],
+        "properties": {
+          "column": {
+            "type": "string",
+            "description": "Name of the free-text column."
+          },
+          "use_in_analysis": {
+            "type": "boolean",
+            "description": "true = the column is used in the analysis as written; false = the column is excluded and masked instead."
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Per-column record of the choice the human made for free-text columns at Gate1. Omit when the confirmation did not occur."
+    },
+    "municipality_name": {
+      "type": "string",
+      "description": "自治体名（レポートタイトルに使用）"
+    },
+    "actionability_definition": {
+      "type": "string",
+      "description": "この案件における「行動に繋がる成果」の定義"
+    },
+    "constraints": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "締め切り・機密要件・その他制約"
+    }
+  },
+  "additionalProperties": false
+}

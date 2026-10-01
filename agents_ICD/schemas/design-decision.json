@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "design-decision",
+  "title": "DesignDecision",
+  "description": "analysis-designer が改訂のステップで PM へ返す判断。変更点の一覧・収束の判定・改訂の要旨を含む。計画の全文は返さない——変更点だけを返し、apply_brief_changes.py が計画のファイルに反映する。書かなかった項目は変わらない。収束の判断は designer が行う。",
+  "type": "object",
+  "required": ["changes", "verdict", "revision_notes"],
+  "properties": {
+    "changes": {
+      "$ref": "#/$defs/BriefChanges",
+      "description": "この改訂で加える変更の一覧。変更がないラウンドでは空のオブジェクトを置く"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["done", "continue"],
+      "description": "done=計画は十分・収束（往復の終了） / continue=さらに改訂の余地あり"
+    },
+    "revision_notes": {
+      "type": "string",
+      "description": "このラウンドで何を変えたか、何を変えなかったか、およびその理由。must_fix の指摘には、ここでひとつずつ答える"
+    }
+  },
+  "$defs": {
+    "BriefChanges": {
+      "type": "object",
+      "description": "計画への変更の一覧。4種類の操作だけを持つ。該当のない項目は付けない",
+      "properties": {
+        "field_changes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/FieldChange" },
+          "default": [],
+          "description": "計画そのものの項目の書き換え（policy_question など）。tasks は対象外——タスクへの変更は task_changes・added_tasks・deleted_tasks で行う"
+        },
+        "task_changes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TaskChange" },
+          "default": [],
+          "description": "既存のタスクの中の項目の書き換え"
+        },
+        "added_tasks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TaskAddition" },
+          "default": [],
+          "description": "新しく追加するタスク"
+        },
+        "deleted_tasks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TaskDeletion" },
+          "default": [],
+          "description": "削除するタスク"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FieldChange": {
+      "type": "object",
+      "required": ["field", "new_value", "reason"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "書き換える項目の名前。analysis-brief.json に定義のある項目に限る。pii_columns は指定できない（課長が確認の場で決める項目）"
+        },
+        "new_value": {
+          "description": "書き換えたあとの値。型は項目の定義に従う"
+        },
+        "reason": {
+          "type": "string",
+          "description": "この変更を加えた理由。どの指摘に応えたものかが分かるように書く"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TaskChange": {
+      "type": "object",
+      "required": ["task_name", "field", "new_value", "reason"],
+      "properties": {
+        "task_name": {
+          "type": "string",
+          "description": "対象のタスクの名前。計画に実在するものに限る"
+        },
+        "field": {
+          "type": "string",
+          "description": "書き換える項目の名前。AnalysisTask に定義のある項目に限る。name は指定できない（タスク名は変更しない——変える必要があるときは削除して追加する）"
+        },
+        "new_value": {
+          "description": "書き換えたあとの値。型は項目の定義に従う"
+        },
+        "reason": {
+          "type": "string",
+          "description": "この変更を加えた理由。どの指摘に応えたものかが分かるように書く"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TaskAddition": {
+      "type": "object",
+      "required": ["task", "reason"],
+      "properties": {
+        "task": {
+          "$ref": "analysis-brief.json#/$defs/AnalysisTask",
+          "description": "追加するタスクの全体。名前は計画にある既存のタスクと重ならないこと"
+        },
+        "reason": {
+          "type": "string",
+          "description": "このタスクを追加した理由。どの指摘に応えたものかが分かるように書く"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TaskDeletion": {
+      "type": "object",
+      "required": ["task_name", "reason"],
+      "properties": {
+        "task_name": {
+          "type": "string",
+          "description": "削除するタスクの名前。計画に実在するものに限る"
+        },
+        "reason": {
+          "type": "string",
+          "description": "このタスクを削除した理由。どの指摘に応えたものかが分かるように書く"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

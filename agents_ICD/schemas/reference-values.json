@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "reference-values",
+  "title": "ReferenceValues",
+  "description": "前処理で一度だけ抽出する参照値の一覧。data-scientist が書き、分析タスクの data-scientist と結果検証の econometrician が読む。キーは出典の source_name。全員が同じ数値をこのファイルから読む（各自で導き直さない）。",
+  "type": "object",
+  "minProperties": 1,
+  "additionalProperties": { "$ref": "#/$defs/ReferenceEntry" },
+  "$defs": {
+    "ReferenceEntry": {
+      "type": "object",
+      "required": ["sha256", "granularity_and_period", "values"],
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "出典ファイルの指紋。取得記録の値をそのまま写す——数値だけが独り歩きしないため"
+        },
+        "granularity_and_period": {
+          "type": "string",
+          "description": "データの粗さと時点。brief の external_data の記載をそのまま写す"
+        },
+        "values": {
+          "type": "object",
+          "description": "変数名→集計値。内訳を持つ値は小さなオブジェクトでよい",
+          "additionalProperties": true
+        },
+        "notes": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "読む人が知っておくべき留保（定義のずれ・再計算の有無など）。無ければ null"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "report-draft",
+  "title": "ReportDraft",
+  "description": "report-writerがオーケストレーター（main）へ返すレポート完成通知。レポート本体はoutput_pathのファイル。",
+  "type": "object",
+  "required": ["output_path", "word_count", "sections_present", "write_confirmed"],
+  "properties": {
+    "output_path": {
+      "type": "string",
+      "description": "書き込んだ.mdファイルのパス"
+    },
+    "write_confirmed": {
+      "type": "boolean",
+      "description": "report-writerがBash+pythonでreport_draft.mdを書き、読み戻し検証まで成功したか。true=書き込み＋読み戻し成功 / false=書き込めなかった（理由はreview_notes）"
+    },
+    "word_count": {
+      "type": "integer",
+      "description": "本文のおよその文字数"
+    },
+    "sections_present": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "レポートに含まれる##見出しのリスト"
+    },
+    "sections_missing": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "データ不足等で書けなかった必須セクション"
+    },
+    "causation_claims_used": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "因果言語を使用したtask_name。causation_claim='causal_evidence'の場合のみ許可"
+    },
+    "review_notes": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "オペレーターへの申し送り事項"
+    }
+  },
+  "additionalProperties": false
+}

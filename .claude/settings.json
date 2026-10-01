@@ -1,0 +1,20 @@
+{
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "2",
+    "TMPDIR": "/tmp",
+    "PYTHONUTF8": "1"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "bash",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/hooks/set_layer_dir.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "research-output",
+  "title": "ResearchOutput",
+  "description": "researcherがフェーズ2で外部オープンデータの候補を探索し、PMへ返す提案。提案のみ（選定・取得・mergeはしない）。candidatesは関連度順。",
+  "type": "object",
+  "required": ["candidates"],
+  "properties": {
+    "candidates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/ExternalDataCandidate" },
+      "default": [],
+      "description": "外部データ候補の一覧（関連度順）。適切なデータが無ければ空配列とし、noteで理由を説明する"
+    },
+    "prior_findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/PriorFinding" },
+      "default": [],
+      "description": "データセットではない先行知見（先行研究の効果量・既存調査の結論等）。必ず出典URLつき"
+    },
+    "note": {
+      "type": "string",
+      "description": "候補ゼロ時の理由や、分析デザイナーへの所見（任意）"
+    }
+  },
+  "$defs": {
+    "PriorFinding": {
+      "type": "object",
+      "required": ["finding", "source_name", "url"],
+      "properties": {
+        "finding": {
+          "type": "string",
+          "description": "知見の内容（1文・言い換え最小限）"
+        },
+        "source_name": {
+          "type": "string",
+          "description": "出典名（先行研究・調査の名称）"
+        },
+        "url": {
+          "type": "string",
+          "description": "出典URL（必須。出典を持たない知見は書かない）"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExternalDataCandidate": {
+      "type": "object",
+      "required": [
+        "source_name",
+        "provider",
+        "description",
+        "granularity_and_period",
+        "access_method",
+        "usage_terms",
+        "contribution_to_analysis",
+        "join_keys"
+      ],
+      "properties": {
+        "source_name": {
+          "type": "string",
+          "description": "データセット名（日本語可。例「人口動態統計」）"
+        },
+        "provider": {
+          "type": "string",
+          "description": "提供元（例「e-Stat」「RESAS」「気象庁」「国勢調査」）"
+        },
+        "description": {
+          "type": "string",
+          "description": "何のデータか平易な日本語1文"
+        },
+        "granularity_and_period": {
+          "type": "string",
+          "description": "空間・時間粒度と期間（例「市町村別・年次・2015-2024年」）"
+        },
+        "access_method": {
+          "description": "構造化されたアクセス仕様。実在確認済みの実行可能な取得経路、または manual（人間の手動取得手順）",
+          "$ref": "#/$defs/AccessSpec"
+        },
+        "usage_terms": {
+          "type": "string",
+          "description": "ライセンスと出典要件"
+        },
+        "contribution_to_analysis": {
+          "type": "string",
+          "description": "このデータが分析をどう改善するか（交絡変数の統制、ベンチマーク提供など）"
+        },
+        "join_keys": {
+          "type": "string",
+          "description": "社内データとの結合キー候補（例「市町村コード × 年度」）"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AccessSpec": {
+      "type": "object",
+      "required": ["access_type"],
+      "properties": {
+        "access_type": {
+          "type": "string",
+          "enum": ["direct_url", "manual"],
+          "description": "取得方式の分類。direct_url=安定したファイル直リンク（実在確認済み・httpsのみ）/ manual=自動取得不能・人間が所定フォルダに置く手順"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https://",
+          "description": "direct_urlで必須：WebFetchで実在確認済みのファイル直リンク。httpsのみ（httpはスキーマが拒否）。推測のURLを捏造しない"
+        },
+        "manual_instructions": {
+          "type": "string",
+          "description": "manualで必須：人間が入手する手順（ページURL・画面操作・対象ファイル）を平易な日本語で"
+        },
+        "expected_format": {
+          "type": "string",
+          "enum": ["csv", "xlsx", "json", "other"],
+          "description": "取得されるファイルの想定形式（任意）"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["access_type"], "properties": { "access_type": { "const": "direct_url" } } },
+          "then": { "required": ["url"] }
+        },
+        {
+          "if": { "required": ["access_type"], "properties": { "access_type": { "const": "manual" } } },
+          "then": { "required": ["manual_instructions"] }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

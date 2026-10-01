@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "report-spec",
+  "title": "ReportSpec",
+  "description": "Gate3承認後にオーケストレーター（main）がreport-writerへ渡すレポート仕様。",
+  "type": "object",
+  "required": [
+    "municipality_name",
+    "target_audience",
+    "key_message",
+    "analysis_output_path",
+    "output_path"
+  ],
+  "properties": {
+    "municipality_name": { "type": "string" },
+    "project_date": {
+      "type": "string",
+      "description": "ISO日付文字列（例: 2026-06-10）"
+    },
+    "target_audience": {
+      "type": "string",
+      "description": "読者層（言語の難易度に影響）"
+    },
+    "key_message": {
+      "type": "string",
+      "description": "最も重要な発見1件。レポートの冒頭に置く"
+    },
+    "analysis_output_path": {
+      "type": "string",
+      "description": "分析結果ファイル（analysis_output.json）の絶対パス。report-writer が Read で読む"
+    },
+    "output_path": {
+      "type": "string",
+      "description": "レポートの書き込み先の絶対パス（例: <分析層の根>/projects/<案件名>/output/report_draft.md）"
+    },
+    "custom_sections": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "default": null,
+      "description": "既定の章立てに追加する節の名前の一覧。既定の節は省かれない"
+    },
+    "confidentiality_note": {
+      "type": ["string", "null"],
+      "default": null,
+      "description": "レポートヘッダーに記載する機密注記"
+    },
+    "references": {
+      "type": "array",
+      "items": { "$ref": "research-output.json#/$defs/PriorFinding" },
+      "description": "参考文献の節に載せる先行知見。PM が、採用された計画の rationale に実際に引用された知見だけを、ResearchOutput の prior_findings から一字も変えずに写す。report-writer は、この欄に中身があるときだけ参考文献の節を設け、内容をそのまま載せる。引用が無い案件では欄ごと付けない"
+    },
+    "next_steps": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/NextStep" },
+      "description": "「次のステップ案」の材料。PM が、結果検証の指摘のうち fix_type が upgrade_path のものから写す。該当が無い案件では欄ごと付けない"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NextStep": {
+      "type": "object",
+      "required": ["task_name", "action", "reason"],
+      "properties": {
+        "task_name": { "type": "string", "description": "どの分析についての提案か（指摘の target を写す）" },
+        "action": { "type": "string", "description": "次に何をするとよいか（指摘の suggestion を写す）" },
+        "reason": { "type": "string", "description": "その理由（指摘の rationale を写す）" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

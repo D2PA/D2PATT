@@ -1,0 +1,198 @@
+#!/usr/bin/env bash
+#
+# run -- Python-interpreter launcher wrapper for the EBPM harness.
+#
+# WHY THIS EXISTS (do not "simplify" this away):
+#   On many Windows machines the bare `python` / `python3` commands resolve to
+#   the Microsoft Store *stub* that lives under:
+#       ...\AppData\Local\Microsoft\WindowsApps\python.exe
+#   That stub does NOT run the script. It exits 49 (or pops a Store dialog)
+#   without executing anything. Harness tools whose exit codes are assurance
+#   gates (round_counter.py, mask_pii.py, lint_results.py, validate_icd.py) then
+#   silently fail to run, which is far worse than a loud error.
+#
+#   The REAL interpreter on those machines is reachable through the Windows
+#   `py -3` launcher (PEP 397), which returns a genuine CPython 3.x.
+#
+# WHAT THIS DOES:
+#   Centralizes interpreter resolution so every agent can call tools through one
+#   entry point instead of guessing `python` vs `python3` vs `py`. It resolves a
+#   working interpreter, then `exec`s it with all arguments so the target
+#   script's stdout, stderr, and EXIT CODE pass through completely unchanged.
+#   The exit code is load-bearing (assurance gates depend on it) -- never wrap,
+#   swallow, or remap it.
+#
+# RESOLUTION ORDER (keep this list in step with the code below):
+#   a. Find the Python project that owns the analysis layer. In a source
+#      checkout it is the parent of `src/`; in a standalone distribution it is
+#      the analysis-layer root itself. If that project has `pyproject.toml`,
+#      `uv` is on PATH, and `uv run` succeeds -> use that project environment.
+#   b. Else, if the `py` launcher exists and `py -3 -c ""` succeeds -> use
+#      `py -3`.
+#   c. Else, for each of `python3`, `python`: if it resolves to a path that does
+#      NOT contain "WindowsApps" and `<cand> -c ""` succeeds -> use it.
+#   d. Else: print a diagnostic listing everything that was tried, exit 127.
+#
+# USAGE:
+#   From the analysis layer -- the normal form (rule 2 below):
+#       bash "$LAYER_DIR/tools/run" <tool-name>.py [args...]
+#       e.g.  bash "$LAYER_DIR/tools/run" phase_timer.py report
+#             bash "$LAYER_DIR/tools/run" round_counter.py status
+#     Only the tool's own file name is written -- no `src/`, no `tools/`. The
+#     wrapper knows its own directory, so the analysis layer can be relocated or
+#     distributed on its own without editing a single document. LAYER_DIR holds
+#     the absolute path of the analysis layer root; the SessionStart hook
+#     (`hooks/set_layer_dir.sh`) sets it by appending `export LAYER_DIR=...`
+#     to the file named by CLAUDE_ENV_FILE, which Claude Code runs as a preamble
+#     before every Bash command.
+#
+#   With a path below the analysis-layer root (rule 3 below):
+#       bash "$LAYER_DIR/tools/run" tools/phase_timer.py report
+#     A relative path that CONTAINS a separator is resolved against the
+#     analysis-layer root. Development-layer hooks pass absolute script paths.
+#
+#   With an absolute path (rule 1 below):
+#       bash "$LAYER_DIR/tools/run" "$OUTPUT_DIR/scripts/<task>.py"
+#     The data-scientist writes its analysis scripts under the case folder's
+#     scripts/ and runs them by absolute path.
+#
+# SCRIPT-PATH RESOLUTION (cwd-INDEPENDENCE -- do not "simplify" this away):
+#   No caller can rely on its cwd: the analysis session is launched with
+#   from the analysis layer root (cwd `.../src` in this monorepo), the
+#   development layer's hooks fire from the repo root, and the data-scientist
+#   runs scripts that live in whichever case folder it was given. So
+#   callers address THIS wrapper by an absolute path ("$LAYER_DIR/tools/run" or
+#   "$CLAUDE_PROJECT_DIR/src/tools/run"), and the wrapper resolves the FIRST
+#   positional arg (the script path) itself -- against anchors derived from $0,
+#   never against cwd. The path anchors are:
+#       HERE = this wrapper's own directory  (= the analysis layer's tools/)
+#       LAYER_ROOT = HERE's parent           (= the analysis-layer root)
+#   PROJECT_ROOT is separate: it is LAYER_ROOT in a standalone distribution,
+#   or LAYER_ROOT's parent when LAYER_ROOT is the source checkout's `src/`.
+#
+#   Exactly three rules, tested in this order:
+#     1. ABSOLUTE path -> passed through verbatim. "Absolute" means a POSIX path
+#        starting with `/` (incl. git-bash `/c/...` and `/tmp/...`) OR a Windows
+#        drive path (`[A-Za-z]:[/\]...`). The data-scientist passes
+#        `/tmp/<task>_analysis.py`; those must reach Python untouched.
+#     2. BARE NAME -- contains neither `/` nor `\` (e.g. `phase_timer.py`)
+#        -> resolved against HERE. This is the form the analysis layer's
+#        documents use. If the named tool is NOT next to this wrapper, the
+#        non-existent path is handed to Python as-is and Python reports it.
+#        There is deliberately NO fallback to rule 3: a silent second guess
+#        would make *which file ran* depend on what happens to exist elsewhere.
+#     3. RELATIVE path CONTAINING a separator (e.g. `tools/phase_timer.py`)
+#        -> resolved against LAYER_ROOT. The meaning therefore stays unchanged
+#        when the contents of `src/` become the root of a distribution.
+#   All remaining args (flags, values with spaces) are preserved exactly.
+#
+# PORTABILITY:
+#   Pure POSIX/bash, no Python (the whole point is to *find* Python), no extra
+#   dependencies. Runs under git-bash on municipality Windows machines.
+
+set -u
+
+# --- Resolve the script-path argument so invocations are cwd-independent -----
+# Both anchors come from $0, so they hold whether $0 is absolute (every real
+# caller's form) or a valid relative path from cwd.
+#   HERE       = .../src/tools (development) or .../tools (distribution)
+#   LAYER_ROOT = .../src       (development) or .../       (distribution)
+HERE="$(cd "$(dirname "$0")" && pwd)"
+LAYER_ROOT="$(cd "$HERE/.." && pwd)"
+
+# `uv` needs the directory containing pyproject.toml, which is not the same
+# anchor in the two supported layouts. Prefer a project file in the layer root
+# (standalone distribution). Only inspect the parent for the known development
+# layout whose layer directory is literally named `src`.
+PROJECT_ROOT=""
+if [ -f "$LAYER_ROOT/pyproject.toml" ]; then
+    PROJECT_ROOT="$LAYER_ROOT"
+elif [ "$(basename "$LAYER_ROOT")" = "src" ]; then
+    development_root="$(cd "$LAYER_ROOT/.." && pwd)"
+    if [ -f "$development_root/pyproject.toml" ]; then
+        PROJECT_ROOT="$development_root"
+    fi
+fi
+
+# Build the forwarded argument list. Only the FIRST positional arg (the script
+# path) is candidate for rewriting; everything after it is passed through as-is.
+fwd_args=()
+if [ "$#" -gt 0 ]; then
+    script="$1"
+    shift
+    case "$script" in
+        /*)
+            # Rule 1: POSIX-absolute (incl. /c/... and /tmp/...): leave untouched.
+            ;;
+        [A-Za-z]:[/\\]*)
+            # Rule 1: Windows drive path (C:\... or C:/...): leave untouched.
+            ;;
+        */*|*\\*)
+            # Rule 3: relative WITH a separator -> anchor to the layer root.
+            script="$LAYER_ROOT/$script"
+            ;;
+        *)
+            # Rule 2: bare tool name -> anchor to this wrapper's own directory.
+            # No fallback to rule 3 when it is missing: Python reports the path.
+            script="$HERE/$script"
+            ;;
+    esac
+    fwd_args=("$script" "$@")
+fi
+# After this, "${fwd_args[@]}" is the (possibly rewritten) full argument list;
+# it is empty iff the wrapper was invoked with zero args (prior behavior kept).
+
+# Collect diagnostics so failure mode (d) can explain exactly what was tried.
+tried=()
+
+# --- (a) uv runner, pinned to the project environment ----------------------
+if [ -n "$PROJECT_ROOT" ] && command -v uv >/dev/null 2>&1; then
+    if uv run --no-dev --project "$PROJECT_ROOT" python -c "" >/dev/null 2>&1; then
+        exec uv run --no-dev --project "$PROJECT_ROOT" python "${fwd_args[@]}"
+    fi
+    tried+=("uv run --project $PROJECT_ROOT (uv present but interpreter check failed)")
+elif [ -z "$PROJECT_ROOT" ]; then
+    tried+=("uv (no pyproject.toml found for the analysis layer)")
+else
+    tried+=("uv (uv not found on PATH)")
+fi
+
+# --- (b) Windows `py` launcher, pinned to Python 3 -------------------------
+if command -v py >/dev/null 2>&1; then
+    if py -3 -c "" >/dev/null 2>&1; then
+        exec py -3 "${fwd_args[@]}"
+    fi
+    tried+=("py -3 (launcher present but 'py -3 -c \"\"' failed)")
+else
+    tried+=("py (launcher not found on PATH)")
+fi
+
+# --- (c) Plain interpreters, skipping the Microsoft Store stub --------------
+for cand in python3 python; do
+    cand_path="$(command -v "$cand" 2>/dev/null)"
+    if [ -z "$cand_path" ]; then
+        tried+=("$cand (not found on PATH)")
+        continue
+    fi
+    case "$cand_path" in
+        *WindowsApps*)
+            tried+=("$cand -> $cand_path (Microsoft Store stub, skipped)")
+            continue
+            ;;
+    esac
+    if "$cand" -c "" >/dev/null 2>&1; then
+        exec "$cand" "${fwd_args[@]}"
+    fi
+    tried+=("$cand -> $cand_path (present but '$cand -c \"\"' failed)")
+done
+
+# --- (d) Nothing usable -----------------------------------------------------
+{
+    echo "run: no working Python 3 interpreter found." >&2
+    echo "run: tried the following, in order:" >&2
+    for t in "${tried[@]}"; do
+        echo "  - $t" >&2
+    done
+    echo "run: install Python 3 (the Windows 'py -3' launcher is preferred) and retry." >&2
+}
+exit 127
